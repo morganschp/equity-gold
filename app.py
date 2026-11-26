@@ -1,11 +1,8 @@
-import threading
-
-from matplotlib import style
 import numpy as np
 import streamlit as st
-from matplotlib.figure import Figure
 
 from backtest import download_prices, portfolio_weights, simulate
+from controls import allocation_controls
 
 st.set_page_config(page_title="Global Equity and Gold Backtest", layout="centered")
 
@@ -54,29 +51,43 @@ def scenario(prices, gold_percent, em_percent):
     return weights, *simulate(prices, weights, 2025)
 
 
-@st.cache_resource
-def plot_lock():
-    return threading.Lock()
-
-
-def chart(series, title, ylabel):
-    # The Colab notebook uses pandas plotting with the default Matplotlib style.
-    with plot_lock(), style.context("default"):
-        figure = Figure(figsize=(9, 4), facecolor="white")
-        axis = figure.subplots()
-        series.plot(ax=axis, title=title, ylabel=ylabel, xlabel="Date",
-                    color=[GOLD_BLUE, EQUITY_ORANGE, TREASURY_GREEN])
-        st.pyplot(figure, width="stretch")
+def chart(series, title, ylabel, *, drawdown=False):
+    # Use the notebook's daily portfolio values directly for both lines and tooltips.
+    source = series.rename_axis("Date").reset_index()
+    source["Date"] = source["Date"].dt.strftime("%Y-%m-%d")
+    axis = {"axisLine": {"show": True, "lineStyle": {"color": "black"}},
+            "axisTick": {"show": True}, "splitLine": {"show": False},
+            "nameLocation": "middle"}
+    legend_position = {"bottom": 64} if drawdown else {"top": 40}
+    spec = {
+        "animation": False, "backgroundColor": "white", "useUTC": True,
+        "textStyle": {"color": "black", "fontFamily": "Arial, sans-serif"},
+        "title": {"text": title, "left": "center", "textStyle": {"fontSize": 16, "fontWeight": "normal"}},
+        "color": [GOLD_BLUE, EQUITY_ORANGE, TREASURY_GREEN],
+        "grid": {"left": 62, "right": 12, "top": 34, "bottom": 59, "show": True, "borderColor": "black"},
+        "legend": {"left": 66, **legend_position, "orient": "vertical", "itemHeight": 2, "itemWidth": 22,
+                   "icon": "rect", "backgroundColor": "white", "borderColor": "#ccc", "borderWidth": 1},
+        "tooltip": {"trigger": "axis", "confine": True, "valueFormatter": "%.2f%%" if drawdown else "$%.4f"},
+        "dataset": {"source": source},
+        "xAxis": {**axis, "type": "time", "name": "Date", "nameGap": 38,
+                  "axisLabel": {"formatter": "{yyyy}", "rotate": 27, "hideOverlap": True},
+                  "splitNumber": 6},
+        "yAxis": {**axis, "type": "value", "scale": True, "name": ylabel, "nameGap": 42},
+        "series": [
+            {"type": "line", "name": name, "encode": {"x": "Date", "y": name, "tooltip": [name]},
+             "showSymbol": False, "lineStyle": {"width": 1.7}}
+            for name in series
+        ],
+    }
+    st.echarts_chart(spec, height=335, theme=None, key="drawdown" if drawdown else "growth", alt=title)
 
 
 st.title("Global Equity and Gold Backtest")
 st.write("Compare gold with an all-equity portfolio and with the same weight in short-term US Treasuries.")
 
-gold_control, em_control = st.columns(2)
-gold = gold_control.slider("Gold share of total portfolio", 0, 100, 10, format="%d%%",
-                           help="The Treasury benchmark puts this same percentage in SHY.")
-em = em_control.slider("Emerging markets’ share of equities", 0, 100, 10, format="%d%%",
-                       help="All three portfolios put this share of their equity allocation in IEMG and the rest in URTH.")
+settings = allocation_controls(key="allocation", default={"weights": {"gold": 10, "em": 10}},
+                               on_weights_change=lambda: None)
+gold, em = settings.weights["gold"], settings.weights["em"]
 
 try:
     prices = cached_prices()
@@ -89,7 +100,7 @@ weights, wealth, drawdowns, summary, relative = scenario(prices, gold, em)
 allocation_bar(weights["Gold"])
 st.caption("January 2015 – December 2025 · Quarterly rebalancing · 0.10% per dollar bought or sold")
 chart(wealth, "Growth of $1 after trading costs", "Portfolio value (USD)")
-chart(100 * drawdowns, "Loss from the previous peak", "Drawdown (%)")
+chart(100 * drawdowns, "Loss from the previous peak", "Drawdown (%)", drawdown=True)
 
 st.subheader("Performance")
 st.table(summary.T.style.format(lambda value: f"{value:,.2f}").format(

@@ -8,7 +8,7 @@ Explore how the gold weight and the emerging-markets share of equities affect a 
 | Equity | 90% | 10% | 0% | 0% |
 | Treasury | 81% | 9% | 0% | 10% |
 
-Both sliders start at 10%. All three portfolios use the selected developed/emerging split within equities. Treasury invests the same percentage in SHY that Gold invests in GLD.
+Both sliders start at 10%. Drag either slider to update both charts. Hover to compare daily portfolio values or drawdowns, and select **Reset to original allocation** to restore the two defaults. All three portfolios use the selected developed/emerging split within equities. Treasury invests the same percentage in SHY that Gold invests in GLD.
 
 ## Run locally
 
